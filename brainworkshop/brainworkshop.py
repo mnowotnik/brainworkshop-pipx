@@ -26,9 +26,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not see https://www.gnu.org/licenses/gpl-2.0.html
 #------------------------------------------------------------------------------
-# Use python3 style division for consistency
-from __future__ import division
+import io
+
 VERSION = '5.0'
+PACKAGE_NAME = 'brainworkshop'
 def debug_msg(msg):
     if DEBUG:
         if isinstance(msg, Exception):
@@ -53,25 +54,19 @@ def get_argv(arg):
             error_msg("Expected an argument following %s" % arg)
             exit(1)
 
-import random, os, sys, socket, webbrowser, time, math, traceback, datetime, errno
-if sys.version_info >= (3,0):
-    import urllib.request, configparser as ConfigParser
-    from io import StringIO
-    import pickle
-else:
-    import urllib2 as urllib, ConfigParser, StringIO
-    import cPickle as pickle
+from importlib.abc import Traversable
+import random, os, sys, socket, webbrowser, time, math, traceback, datetime, errno, importlib.resources as resources
+import urllib.request, configparser as ConfigParser
+from io import StringIO
+import pickle
 
 from decimal import Decimal
 from time import strftime
 from datetime import date
 import gettext
 
-if sys.version_info >= (3,0):
-    # TODO check if this is right
-    gettext.install('messages', localedir='res/i18n')
-else:
-    gettext.install('messages', localedir='res/i18n', unicode=True)
+# TODO check if this is right
+gettext.install('messages', localedir='res/i18n')
 
 # Clinical mode?  Clinical mode sets cfg.JAEGGI_MODE = True, enforces a minimal user
 # interface, and saves results into a binary file (default 'logfile.dat') which
@@ -171,6 +166,11 @@ def get_settings_path(name):
     else: # on *nix, we want it to be lowercase and without spaces (~/.brainworkshop/data)
         return os.path.expanduser('~/.%s' % (name.lower().replace(' ', '')))
 
+def pyglet_load_traversable(package, resource):
+    with resources.open_binary(package, resource) as stream:
+        with io.BytesIO(stream.read()) as f:
+            return pyglet.media.load(resource, file = f, streaming=False)
+
 def get_data_dir():
     rtrn = get_argv('--datadir')
     if rtrn:
@@ -178,11 +178,7 @@ def get_data_dir():
     else:
         return os.path.join(get_settings_path('Brain Workshop'), FOLDER_DATA)
 def get_res_dir():
-    rtrn = get_argv('--resdir')
-    if rtrn:
-        return rtrn
-    else:
-        return os.path.join(get_main_dir(), FOLDER_RES)
+    return FOLDER_RES
 def edit_config_ini():
     if sys.platform == 'win32':
         cmd = 'notepad'
@@ -762,10 +758,7 @@ def parse_config(configpath):
                                  os.path.join(get_data_dir(), configpath))
 
     defaultconfig = ConfigParser.ConfigParser()
-    if sys.version_info >= (3,):
-        defaultconfig.read_file(StringIO(CONFIGFILE_DEFAULT_CONTENTS))
-    else:
-        defaultconfig.readfp(StringIO.StringIO(CONFIGFILE_DEFAULT_CONTENTS))
+    defaultconfig.read_file(StringIO(CONFIGFILE_DEFAULT_CONTENTS))
 
     def try_eval(text):  # this is a one-use function for config parsing
         try:  return eval(text)
@@ -818,10 +811,10 @@ def rewrite_configfile(configfile, overwrite=False):
         f.close()
 
 try:
-    path = get_data_dir()
-    os.makedirs(path)
+    static_path = get_data_dir()
+    os.makedirs(static_path)
 except OSError as e:
-    if e.errno == errno.EEXIST and os.path.isdir(path):
+    if e.errno == errno.EEXIST and os.path.isdir(static_path):
         pass
     else:
         raise
@@ -892,10 +885,7 @@ def update_check():
     global update_available
     global update_version
     socket.setdefaulttimeout(TIMEOUT_SILENT)
-    if sys.version_info >= (3,0):
-        req = urllib.request.Request(WEB_VERSION_CHECK)
-    else:
-        req = urllib.Request(WEB_VERSION_CHECK)
+    req = urllib.request.Request(WEB_VERSION_CHECK)
     try:
         response = urllib.urlopen(req)
         version = response.readline().strip()
@@ -912,7 +902,7 @@ try:
     # workaround for pyglet.gl.ContextException error on certain video cards.
     os.environ["PYGLET_SHADOW_WINDOW"] = "0"
     import pyglet
-    if NOVBO: pyglet.options['graphics_vbo'] = False
+    # if NOVBO: pyglet.options['graphics_vbo'] = False
     from pyglet.window import key
 
     # shapes submodule is available with pyglet >=1.5.4
@@ -930,11 +920,14 @@ if audio_driver.__class__.__name__ == "SilentDriver":
 #
 # --- BEGIN RESOURCE INITIALIZATION SECTION ----------------------------------
 #
-
-res_path = get_res_dir()
-if not os.access(res_path, os.F_OK):
-    quit_with_error(_('Error: the resource folder\n%s') % res_path +
-                    _(' does not exist or is not readable.  Exiting'), trace=False)
+res_tmp_path = get_res_dir()
+try:
+    res_dir = resources.files(PACKAGE_NAME)
+    if not res_dir.is_dir():
+        quit_with_error(_('Error: the resource folder\n%s') % res_tmp_path +
+                        _(' does not exist or is not readable.  Exiting'), trace=False)
+except ModuleNotFoundError:
+    quit_with_error(PACKAGE_NAME + " package does not exist. Exiting", trace=False)
 
 if pyglet.version < '1.1':
     quit_with_error(_('Error: pyglet 1.1 or greater is required.\n') +
@@ -942,125 +935,40 @@ if pyglet.version < '1.1':
                     _('Please visit %s') % WEB_PYGLET_DOWNLOAD, trace=False)
 
 supportedtypes = {'sounds' :['wav'],
-                  'music'  :['wav', 'ogg', 'mp3', 'aac', 'mp2', 'ac3', 'm4a'], # what else?
+                  'music'  :['wav'],
                   'sprites':['png', 'jpg', 'bmp']}
 
-def test_music():
-    try:
-        import pyglet
-        if pyglet.version >= '1.4':
-            from pyglet.media import have_ffmpeg
-            pyglet.media.have_avbin = have_ffmpeg()
-            if not pyglet.media.have_avbin:
-                cfg.USE_MUSIC = False
-        else:
-            try:
-                from pyglet.media import avbin
-            except Exception as e:
-                debug_msg(e)
-                pyglet.lib.load_library('avbin')
-            if pyglet.version >= '1.2':  # temporary workaround for defect in pyglet svn 2445
-                pyglet.media.have_avbin = True
-
-            # On Windows with Data Execution Protection enabled (on by default on Vista),
-            # an exception will be raised when use of avbin is attempted:
-            #   WindowsError: exception: access violation writing [ADDRESS]
-            # The file doesn't need to be in a avbin-specific format,
-            # since pyglet will use avbin over riff whenever it's detected.
-            # Let's find an audio file and try to load it to see if avbin works.
-            opj = os.path.join
-            opj = os.path.join
-            def look_for_music(path):
-                files = [p for p in os.listdir(path) if not p.startswith('.') and not os.path.isdir(opj(path, p))]
-                for f in files:
-                    ext = f.lower()[-3:]
-                    if ext in ['wav', 'ogg', 'mp3', 'aac', 'mp2', 'ac3', 'm4a'] and not ext in ('wav'):
-                        return [opj(path, f)]
-                dirs  = [opj(path, p) for p in os.listdir(path) if not p.startswith('.') and os.path.isdir(opj(path, p))]
-                results = []
-                for d in dirs:
-                    results.extend(look_for_music(d))
-                    if results: return results
-                return results
-            music_file = look_for_music(res_path)
-            if music_file:
-                # The first time we load a file should trigger the exception
-                music_file = music_file[0]
-                loaded_music = pyglet.media.load(music_file, streaming=False)
-                del loaded_music
-            else:
-                cfg.USE_MUSIC = False
-
-    except ImportError as e:
-        debug_msg(e)
-        cfg.USE_MUSIC = False
-        if pyglet.version >= '1.2':
-            pyglet.media.have_avbin = False
-        print( _('AVBin not detected. Music disabled.'))
-        print( _('Download AVBin from: https://avbin.github.io'))
-
-    except Exception as e: # WindowsError
-        debug_msg(e)
-        cfg.USE_MUSIC = False
-        pyglet.media.have_avbin = False
-        if hasattr(pyglet.media, '_source_class'): # pyglet v1.1
-            import pyglet.media.riff
-            pyglet.media._source_class = pyglet.media.riff.WaveSource
-        elif hasattr(pyglet.media, '_source_loader'): # pyglet v1.2 and development branches
-            import pyglet.media.riff
-            pyglet.media._source_loader = pyglet.media.RIFFSourceLoader()
-        Message("""Warning: Could not load AVbin. Music disabled.
-
-This is usually due to Windows Data Execution Prevention (DEP). Due to a bug in
-AVbin, a library used for decoding sound files, music is not available when \
-DEP is enabled. To enable music, disable DEP for Brain Workshop. To simply get \
-rid of this message, set USE_MUSIC = False in your config.ini file.
-
-To disable DEP:
-
-1. Open Control Panel -> System
-2. Select Advanced System Settings
-3. Click on Performance -> Settings
-4. Click on the Data Execution Prevention tab
-5. Either select the "Turn on DEP for essential Windows programs and services \
-only" option, or add an exception for Brain Workshop.
-
-Press any key to continue without music support.
-""")
-
-test_music()
-if pyglet.media.have_avbin: supportedtypes['sounds'] = supportedtypes['music']
-elif cfg.USE_MUSIC:         supportedtypes['music'] = supportedtypes['sounds']
-else:                       del supportedtypes['music']
+if not cfg.USE_MUSIC: 
+    del supportedtypes['music']
 
 supportedtypes['misc'] = supportedtypes['sounds'] + supportedtypes['sprites']
 
 resourcepaths = {}
 for restype in list(supportedtypes):
     res_sets = {}
-    for folder in os.listdir(os.path.join(res_path, restype)):
+    for folder in resources.files(PACKAGE_NAME).joinpath(res_tmp_path).joinpath(restype).iterdir():
         contents = []
-        if os.path.isdir(os.path.join(res_path, restype, folder)):
-            contents = [os.path.join(res_path, restype, folder, obj)
-                          for obj in os.listdir(os.path.join(res_path, restype, folder))
-                                  if obj[-3:] in supportedtypes[restype]]
+        if folder.is_dir():
+            contents = [file for file in folder.iterdir() if file.name[-3:] in supportedtypes[restype]]
             contents.sort()
-        if contents: res_sets[folder] = contents
+        if contents: res_sets[folder.name] = contents
     if res_sets: resourcepaths[restype] = res_sets
+
 
 sounds = {}
 for k in list(resourcepaths['sounds']):
     sounds[k] = {}
-    for f in resourcepaths['sounds'][k]:
-        sounds[k][os.path.basename(f).split('.')[0]] = pyglet.media.load(f, streaming=False)
+    for static_path in resourcepaths['sounds'][k]:
+        static_path: Traversable
+        sounds[k][static_path.name.split('.')[0]] = pyglet_load_traversable("brainworkshop.res.sounds." + k,static_path.name)
 
-sound = sounds['letters'] # is this obsolete yet?
 
 if cfg.USE_APPLAUSE:
-    applausesounds = [pyglet.media.load(soundfile, streaming=False)
+    applausesounds = [pyglet_load_traversable("brainworkshop.res.misc.applause", soundfile.name) for soundfile in resourcepaths['misc']['applause']]
 
-                     for soundfile in resourcepaths['misc']['applause']]
 
+
+sound = sounds['letters'] # is this obsolete yet?
 applauseplayer = get_pyglet_media_Player()
 musicplayer    = get_pyglet_media_Player()
 def play_applause():
@@ -1068,22 +976,33 @@ def play_applause():
     applauseplayer.volume = cfg.SFX_VOLUME
     if DEBUG: print("Playing applause")
     applauseplayer.play()
+
+music = {}
+for k in list(resourcepaths['music']):
+    music[k] = []
+    for static_path in resourcepaths['music'][k]:
+        static_path: Traversable
+        music[k].append(pyglet_load_traversable("brainworkshop.res.music." + k,static_path.name))
+
 def play_music(percent):
+    track = None
     if 'music' in resourcepaths:
         if preventMusicSkipping: pyglet.clock.tick(poll=True) # Prevent music skipping 1
         if percent >= get_threshold_advance() and 'advance' in resourcepaths['music']:
-            musicplayer.queue(pyglet.media.load(random.choice(resourcepaths['music']['advance']), streaming = True))
+            track = random.choice(music['advance'])
         elif percent >= (get_threshold_advance() + get_threshold_fallback()) // 2 and 'great' in resourcepaths['music']:
-            musicplayer.queue(pyglet.media.load(random.choice(resourcepaths['music']['great']), streaming = True))
+            track = random.choice(music['great'])
         elif percent >= get_threshold_fallback() and 'good' in resourcepaths['music']:
-            musicplayer.queue(pyglet.media.load(random.choice(resourcepaths['music']['good']), streaming = True))
+            track = random.choice(music['good'])
         else:
             return
     else:
         return
     musicplayer.volume = cfg.MUSIC_VOLUME
     if DEBUG: print("Playing music")
+    musicplayer.queue(track)
     musicplayer.play()
+
 def sound_stop():
     global applauseplayer
     global musicplayer
@@ -1108,6 +1027,7 @@ def fade_out(dt):
 
     if (applauseplayer.volume == 0 and musicplayer.volume == 0) or mode.trial_number == 3:
         pyglet.clock.unschedule(fade_out)
+
 
 
 #
@@ -4840,9 +4760,10 @@ for msg in messagequeue:
     Message(msg)
 
 # start the event loops!
-if __name__ == '__main__':
-
+def main():
     pyglet.app.run()
+    # nothing below the line "pyglet.app.run()" will be executed until the
+    # window is closed or ESC is pressed.
 
-# nothing below the line "pyglet.app.run()" will be executed until the
-# window is closed or ESC is pressed.
+if __name__ == '__main__':
+    main()
