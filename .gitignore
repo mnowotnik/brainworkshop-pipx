@@ -3,3 +3,5 @@ pyglet/
 future/
 past/
 libfuturize/
+/.venv
+/.vscode
