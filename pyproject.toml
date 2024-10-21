@@ -1,0 +1,48 @@
+# pyproject.toml
+
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brainworkshop-pipx"
+version = "0.1.0"
+description = "Brain Workshop Project"
+readme = "Readme.md"
+requires-python = ">=3.6"
+license = { text = "MIT" }
+
+authors = [
+    { name = "Branworkshop team" }
+]
+
+maintainers = [
+    { name = "Michal Nowotnik", email = "michal@mnowotnik.com" }
+]
+
+keywords = ["brain", "workshop"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "pyglet==2.0.18"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/mnowotnik/brainworkshop-pipx"
+
+[project.scripts]
+brainworkshop = "brainworkshop.brainworkshop:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+exclude = ["tests*"]
+
+[tool.setuptools]
+package-data = {"*" = ["*"]}

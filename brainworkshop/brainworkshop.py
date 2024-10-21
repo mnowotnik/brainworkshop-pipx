@@ -2590,7 +2590,7 @@ class Circles:
     def __init__(self):
         self.y        = from_top_edge(20)
         self.start_x  = from_left_edge(30)
-        self.radius   = scale_to_width(8)
+        self.radius   = scale_to_width(16)
         self.distance = scale_to_width(20)
         if cfg.BLACK_BACKGROUND:
             self.not_activated = [64, 64, 64, 255]
@@ -2604,52 +2604,25 @@ class Circles:
 
         self.circle = []
         for index in range(0, cfg.THRESHOLD_FALLBACK_SESSIONS - 1):
-            if have_shapes:
-                self.circle.append([pyglet.shapes.Rectangle(self.start_x + self.distance * index - self.radius,
-                                                            self.y + self.radius,
-                                                            self.start_x + self.distance * index + self.radius,
-                                                            self.y + self.radius,
-                                                            color=self.not_activated[:3], batch=batch),
-                                    pyglet.shapes.Rectangle(self.start_x + self.distance * index + self.radius,
-                                                            self.y - self.radius,
-                                                            self.start_x + self.distance * index - self.radius,
-                                                            self.y - self.radius,
-                                                            color=self.not_activated[:3], batch=batch)])
-            else:
-                self.circle.append(batch.add(4, pyglet.gl.GL_QUADS, None, ('v2i', (
-                    self.start_x + self.distance * index - self.radius,
-                    self.y + self.radius,
-                    self.start_x + self.distance * index + self.radius,
-                    self.y + self.radius,
-                    self.start_x + self.distance * index + self.radius,
-                    self.y - self.radius,
-                    self.start_x + self.distance * index - self.radius,
-                    self.y - self.radius)),
-                    ('c4B', self.not_activated * 4)))
-
+            self.circle.append([pyglet.shapes.Rectangle(self.start_x + self.distance * index - self.radius,
+                                                        self.y,
+                                                        self.radius,
+                                                        self.radius,
+                                                        color=self.not_activated[:3], batch=batch),])
         self.update()
 
     def update(self):
         if mode.manual or mode.started or cfg.JAEGGI_MODE:
             for i in range(0, cfg.THRESHOLD_FALLBACK_SESSIONS - 1):
-                if have_shapes:
-                    for j in range(2):
-                        self.circle[i][j].colors = (self.invisible * 4)
-                else:
-                    self.circle[i].colors = (self.invisible * 4)
+                for j in range(1):
+                    self.circle[i][j].color = self.invisible
         else:
             for i in range(0, cfg.THRESHOLD_FALLBACK_SESSIONS - 1):
-                if have_shapes:
-                    for j in range(2):
-                        self.circle[i][j].colors = (self.not_activated * 4)
-                else:
-                    self.circle[i].colors = (self.not_activated * 4)
+                for j in range(1):
+                    self.circle[i][j].color = self.not_activated
             for i in range(0, mode.progress):
-                if have_shapes:
-                    for j in range(2):
-                        self.circle[i][j].colors = (self.activated * 4)
-                else:
-                    self.circle[i].colors = (self.activated * 4)
+                for j in range(1):
+                    self.circle[i][j].color = self.activated
 
 
 # this is the update notification
