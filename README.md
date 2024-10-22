@@ -1,7 +1,7 @@
 # BrainWorkshop-pipx
 
-[Brainworkshop 5](https://github.com/brain-workshop/brainworkshop) with small fixes that can be installed using pipx.
-If you don't know about this software, follow [instructions](docs/instructions.txt)
+[Brainworkshop 5](https://github.com/brain-workshop/brainworkshop), with small fixes, that can be installed using pipx.
+If you don't know about this software, follow [instructions](docs/instructions.txt).
 
 # Requirements
 
